@@ -10,6 +10,8 @@ import termios
 import tty
 import warnings
 from pathlib import Path
+from datetime import datetime
+import json
 
 # Suppress pygame welcome message
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
@@ -28,6 +30,92 @@ from rich.live import Live
 
 
 console = Console()
+
+
+class SessionLogger:
+    """Handles logging of focus sessions to journal"""
+    
+    def __init__(self):
+        self.home = Path.home()
+        self.session_start = None
+        self.session_duration = 0
+        self.meditation_duration = 0
+        
+    def _get_log_path(self):
+        """Get the log file path for today's date"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_dir = self.home / "journal" / today
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir / "focus.log"
+        
+    def log_meditation(self, duration_seconds):
+        """Log meditation duration"""
+        self.meditation_duration = duration_seconds
+        
+    def start_session(self, duration_minutes):
+        """Log the start of a focus session"""
+        self.session_start = datetime.now()
+        self.planned_duration = duration_minutes
+        
+    def end_session(self, completed, actual_duration_seconds):
+        """Log the end of a focus session"""
+        if not self.session_start:
+            return
+            
+        log_entry = {
+            "date": self.session_start.strftime("%Y-%m-%d"),
+            "start_time": self.session_start.strftime("%H:%M:%S"),
+            "end_time": datetime.now().strftime("%H:%M:%S"),
+            "planned_duration_min": self.planned_duration,
+            "actual_duration_min": round(actual_duration_seconds / 60, 1),
+            "meditation_min": round(self.meditation_duration / 60, 1) if self.meditation_duration > 0 else 0,
+            "completed": completed,
+            "total_focus_min": round(actual_duration_seconds / 60, 1)
+        }
+        
+        log_path = self._get_log_path()
+        
+        # Append log entry
+        with open(log_path, 'a') as f:
+            f.write(f"* [{log_entry['start_time']} - {log_entry['end_time']}] ")
+            f.write(f"Focus: {log_entry['actual_duration_min']}/{log_entry['planned_duration_min']} min")
+            if log_entry['meditation_min'] > 0:
+                f.write(f" (Meditation: {log_entry['meditation_min']} min)")
+            f.write(f" - {'✓ Completed' if completed else '✗ Ended early'}\n")
+            
+    def get_today_stats(self):
+        """Get today's focus statistics"""
+        log_path = self._get_log_path()
+        if not log_path.exists():
+            return None
+            
+        total_focus = 0
+        total_meditation = 0
+        sessions = 0
+        completed_sessions = 0
+        
+        with open(log_path, 'r') as f:
+            for line in f:
+                if line.startswith('*') and 'Focus:' in line:
+                    sessions += 1
+                    if '✓ Completed' in line:
+                        completed_sessions += 1
+                    # Parse focus time
+                    if 'Focus:' in line:
+                        focus_part = line.split('Focus:')[1].split('min')[0]
+                        actual = float(focus_part.split('/')[0].strip())
+                        total_focus += actual
+                    # Parse meditation time
+                    if 'Meditation:' in line:
+                        med_part = line.split('Meditation:')[1].split('min')[0]
+                        total_meditation += float(med_part.strip())
+                        
+        return {
+            'total_focus_min': total_focus,
+            'total_meditation_min': total_meditation,
+            'sessions': sessions,
+            'completed_sessions': completed_sessions
+        }
 
 
 class AudioPlayer:
@@ -166,11 +254,12 @@ class FocusSession:
 class MeditationPlayer:
     """Handles meditation playback with progress bar"""
     
-    def __init__(self, audio_player, file_path):
+    def __init__(self, audio_player, file_path, logger=None):
         self.audio_player = audio_player
         self.file_path = file_path
         self.skip_requested = False
         self.is_paused = False
+        self.logger = logger
         
     def play_with_progress(self):
         """Play meditation with progress bar and controls"""
@@ -245,6 +334,10 @@ class MeditationPlayer:
             
         self.audio_player.stop()
         
+        # Log meditation duration if logger is available
+        if self.logger and not self.skip_requested:
+            self.logger.log_meditation(duration_ms / 1000)
+        
         console.print()
         if self.skip_requested:
             console.print("[yellow]⏭️  Meditation skipped[/yellow]")
@@ -276,14 +369,22 @@ def get_asset_path(filename):
 def main():
     """Focus Session CLI - Enhance your productivity with mindful work sessions"""
     
-    # Initialize audio player
+    # Initialize audio player and logger
     audio_player = AudioPlayer()
+    logger = SessionLogger()
     
     # Welcome screen
     console.clear()
+    
+    # Show today's stats if available
+    today_stats = logger.get_today_stats()
+    stats_text = ""
+    if today_stats:
+        stats_text = f"\n[dim]Today: {today_stats['total_focus_min']:.1f}min focused, {today_stats['sessions']} sessions[/dim]"
+    
     console.print(Panel.fit(
         "[bold cyan]🧘 Focus Session CLI[/bold cyan]\n\n"
-        "[dim]Enhance your productivity with mindful work sessions[/dim]",
+        f"[dim]Enhance your productivity with mindful work sessions[/dim]{stats_text}",
         border_style="cyan"
     ))
     console.print()
@@ -295,7 +396,8 @@ def main():
     if meditation:
         meditation_player = MeditationPlayer(
             audio_player, 
-            get_asset_path('meditation.mp3')
+            get_asset_path('meditation.mp3'),
+            logger
         )
         meditation_player.play_with_progress()
         time.sleep(1)
@@ -333,6 +435,9 @@ def main():
     
     # Create focus session
     session = FocusSession(int(duration), audio_player)
+    
+    # Log session start
+    logger.start_session(int(duration))
     
     # Main session loop with simple display
     try:
@@ -408,6 +513,10 @@ def main():
                 border_style="green"
             ))
             
+            # Log completed session
+            actual_duration = session.duration - session.time_remaining
+            logger.end_session(completed=True, actual_duration_seconds=actual_duration)
+            
             # Show notification
             show_notification()
             
@@ -416,6 +525,10 @@ def main():
             console.print("\n[dim]Press Enter to dismiss notification...[/dim]")
             input()
         else:  # User quit
+            # Log incomplete session
+            actual_duration = session.duration - session.time_remaining
+            logger.end_session(completed=False, actual_duration_seconds=actual_duration)
+            
             console.print(Panel.fit(
                 "[yellow]👋 Session ended early[/yellow]\n\n"
                 "[dim]No worries! Every moment of focus counts.[/dim]",
