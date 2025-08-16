@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "focus"
+version = "1.0.0"
+description = "A mindful productivity CLI tool for focused work sessions"
+authors = [{name = "Aditya", email = ""}]
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pygame>=2.5.2",
+    "plyer>=2.1",
+    "click>=8.1.7",
+    "rich>=13.7.0",
+]
+
+[project.scripts]
+focus = "focus.main:main"
+
+[tool.setuptools.packages.find]
+include = ["focus*"]
+
+[tool.setuptools.package-data]
+focus = ["assets/*.mp3", "assets/*.wav"]
