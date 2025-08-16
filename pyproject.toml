@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "focus"
 version = "1.0.0"
 description = "A mindful productivity CLI tool for focused work sessions"
-authors = [{name = "Aditya", email = ""}]
+authors = [{name = "Aditya"}]
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
