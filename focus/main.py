@@ -520,7 +520,9 @@ def main():
             # Show notification
             show_notification()
             
-            # Play notification sound in loop
+            # Play notification sound in loop (restore volume for notification)
+            if audio_player.is_muted:
+                pygame.mixer.music.set_volume(audio_player.saved_volume)
             audio_player.play(get_asset_path('notification.wav'), loop=True)
             console.print("\n[dim]Press Enter to dismiss notification...[/dim]")
             input()
